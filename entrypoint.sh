@@ -36,28 +36,37 @@ create_bind_data_dir() {
 
   # populate default bind configuration if it does not exist
   if [ ! -d ${BIND_DATA_DIR}/etc ]; then
-    mv /etc/bind ${BIND_DATA_DIR}/etc
+    mv /etc/${BIND_USER} ${BIND_DATA_DIR}/etc
   fi
-  rm -rf /etc/bind
+  rm -rf /etc/${BIND_USER}
+  rm -rf /etc/${BIND_USER}.*
+  ln -sf ${BIND_DATA_DIR}/etc /etc/${BIND_USER}
+  # Backward compatible with mounted volume
   ln -sf ${BIND_DATA_DIR}/etc /etc/bind
   chmod -R 0775 ${BIND_DATA_DIR}
   chown -R ${BIND_USER}:${BIND_USER} ${BIND_DATA_DIR}
 
   if [ ! -d ${BIND_DATA_DIR}/lib ]; then
-    mkdir -p ${BIND_DATA_DIR}/lib
+    mv /var/${BIND_USER} ${BIND_DATA_DIR}/lib
     chown ${BIND_USER}:${BIND_USER} ${BIND_DATA_DIR}/lib
   fi
-  rm -rf /var/lib/bind
-  ln -sf ${BIND_DATA_DIR}/lib /var/lib/bind
+  rm -rf /var/${BIND_USER}
+  ln -sf ${BIND_DATA_DIR}/lib /var/${BIND_USER}
 }
 
 create_webmin_data_dir() {
-  mkdir -p ${WEBMIN_DATA_DIR}
-  chmod -R 0755 ${WEBMIN_DATA_DIR}
-  chown -R root:root ${WEBMIN_DATA_DIR}
+  if [ -d ${WEBMIN_DATA_DIR} ]; then
+    echo "Using existing ${WEBMIN_DATA_DIR}"
+  else
+    echo "Creating new ${WEBMIN_DATA_DIR}"
+    mkdir -p ${WEBMIN_DATA_DIR}
+    chmod -R 0755 ${WEBMIN_DATA_DIR}
+    chown -R root:root ${WEBMIN_DATA_DIR}
+  fi
 
   # populate the default webmin configuration if it does not exist
   if [ ! -d ${WEBMIN_DATA_DIR}/etc ]; then
+    echo "No existing webmin configuration so initialising new one"
     mv /etc/webmin ${WEBMIN_DATA_DIR}/etc
   fi
   rm -rf /etc/webmin
@@ -69,7 +78,8 @@ set_root_passwd() {
 }
 
 create_pid_dir() {
-  mkdir -m 0775 -p /var/run/named
+  mkdir -p /var/run/named
+  chmod 0775 /var/run/named
   chown root:${BIND_USER} /var/run/named
 }
 
@@ -98,10 +108,12 @@ if [[ -z ${1} ]]; then
     set_root_passwd
     echo "Starting webmin..."
     /etc/init.d/webmin start
+    sleep 1
+    /etc/init.d/webmin status
   fi
 
   echo "Starting named..."
-  exec $(which named) -u ${BIND_USER} -g ${EXTRA_ARGS}
+  exec $(which named) -c /etc/${BIND_USER}/${BIND_USER}.conf -u ${BIND_USER} -g ${EXTRA_ARGS}
 else
   exec "$@"
 fi
